@@ -1,0 +1,157 @@
+-- Tải Kavo UI
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Kavo-hub/Kavo-UI-Library/main/source.lua"))()-- Tải Kavo UI
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Kavo-hub/Kavo-UI-Library/main/source.lua"))()
+
+-- Tạo menu
+local Window = Library.CreateLib("Blox Fruits - Levi Hunter", "Midnight")
+
+local Tab = Window:NewTab("Leviathan")
+local Section = Tab:NewSection("Treo đảo + Auto Levi")
+
+_G.TreoLevi = false
+
+Section:NewToggle("Bật Treo Đảo Levi", "Thuyền bay + Auto đánh + Skill", false, function(state)
+    _G.TreoLevi = state
+
+    local function spamSkill(key)
+        local vim = game:GetService("VirtualInputManager")
+        vim:SendKeyEvent(true, key, false, game)
+        wait(0.05)
+        vim:SendKeyEvent(false, key, false, game)
+    end
+
+    if state then
+        spawn(function()
+            local hrp = game.Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
+
+            -- Tạo lực giữ bay
+            local bv = Instance.new("BodyVelocity")
+            bv.Name = "FloatLevi"
+            bv.Velocity = Vector3.new(0, 0, 0)
+            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            bv.Parent = hrp
+
+            while _G.TreoLevi do
+                local levi = nil
+
+                -- Tìm boss Levi
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v:IsA("Model") and v.Name:lower():find("levi") and v:FindFirstChild("HumanoidRootPart") then
+                        levi = v
+                        break
+                    end
+                end
+
+                if levi then
+                    local dist = (levi.HumanoidRootPart.Position - hrp.Position).Magnitude
+                    if dist > 50 then
+                        -- Bay đến gần Levi
+                        hrp.CFrame = levi.HumanoidRootPart.CFrame * CFrame.new(0, 40, -20)
+                    else
+                        -- Gần Levi: spam kỹ năng + đánh
+                        local tool = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                        if tool then tool:Activate() end
+
+                        spamSkill("Z")
+                        wait(0.2)
+                        spamSkill("X")
+                        wait(0.2)
+                        spamSkill("C")
+                        wait(0.2)
+                        spamSkill("V")
+                        wait(0.2)
+                        spamSkill("F")
+                    end
+                else
+                    -- Không thấy Levi → bay treo trên đảo (tọa độ mẫu)
+                    hrp.CFrame = CFrame.new(5000, 400, -1500)
+                end
+
+                wait(1)
+            end
+
+            -- Khi tắt toggle
+            local old = hrp:FindFirstChild("FloatLevi")
+            if old then old:Destroy() end
+        end)
+    else
+        _G.TreoLevi = false
+    end
+end)
+
+-- Tạo menu
+local Window = Library.CreateLib("Blox Fruits - Levi Hunter", "Midnight")
+
+local Tab = Window:NewTab("Leviathan")
+local Section = Tab:NewSection("Treo đảo + Auto Levi")
+
+_G.TreoLevi = false
+
+Section:NewToggle("Bật Treo Đảo Levi", "Thuyền bay + Auto đánh + Skill", false, function(state)
+    _G.TreoLevi = state
+
+    local function spamSkill(key)
+        local vim = game:GetService("VirtualInputManager")
+        vim:SendKeyEvent(true, key, false, game)
+        wait(0.05)
+        vim:SendKeyEvent(false, key, false, game)
+    end
+
+    if state then
+        spawn(function()
+            local hrp = game.Players.LocalPlayer.Character:WaitForChild("HumanoidRootPart")
+
+            -- Tạo lực giữ bay
+            local bv = Instance.new("BodyVelocity")
+            bv.Name = "FloatLevi"
+            bv.Velocity = Vector3.new(0, 0, 0)
+            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            bv.Parent = hrp
+
+            while _G.TreoLevi do
+                local levi = nil
+
+                -- Tìm boss Levi
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v:IsA("Model") and v.Name:lower():find("levi") and v:FindFirstChild("HumanoidRootPart") then
+                        levi = v
+                        break
+                    end
+                end
+
+                if levi then
+                    local dist = (levi.HumanoidRootPart.Position - hrp.Position).Magnitude
+                    if dist > 50 then
+                        -- Bay đến gần Levi
+                        hrp.CFrame = levi.HumanoidRootPart.CFrame * CFrame.new(0, 40, -20)
+                    else
+                        -- Gần Levi: spam kỹ năng + đánh
+                        local tool = game.Players.LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                        if tool then tool:Activate() end
+
+                        spamSkill("Z")
+                        wait(0.2)
+                        spamSkill("X")
+                        wait(0.2)
+                        spamSkill("C")
+                        wait(0.2)
+                        spamSkill("V")
+                        wait(0.2)
+                        spamSkill("F")
+                    end
+                else
+                    -- Không thấy Levi → bay treo trên đảo (tọa độ mẫu)
+                    hrp.CFrame = CFrame.new(5000, 400, -1500)
+                end
+
+                wait(1)
+            end
+
+            -- Khi tắt toggle
+            local old = hrp:FindFirstChild("FloatLevi")
+            if old then old:Destroy() end
+        end)
+    else
+        _G.TreoLevi = false
+    end
+end)
