@@ -3,7 +3,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local Player = Players.LocalPlayer
 local Modules = ReplicatedStorage:WaitForChild("Modules")
 local Net = Modules:WaitForChild("Net")
@@ -12,17 +12,20 @@ local RegisterHit = Net:WaitForChild("RE/RegisterHit")
 local ShootGunEvent = Net:WaitForChild("RE/ShootGunEvent")
 local GunValidator = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Validator2")
 
---// Cấu hình (có thể chỉnh qua GUI)
+--// Config (Siêu Tốc + Anti-Ignore)
 local Config = {
-    Enabled = true,
     AttackDistance = 70,
     AttackMobs = true,
     AttackPlayers = true,
-    MaxTargets = 50,                -- Số mục tiêu tối đa mỗi đòn
-    GunRange = 120,
-    GunFireRate = 0.005,            -- Khoảng cách giữa các phát súng (giây)
-    BurstCount = 10,                 -- Số lần tấn công mỗi frame (tăng để "cực nhanh")
-    UseRandomDelay = false,          -- Tắt để đạt tốc độ tối đa
+    ComboResetTime = 0.025,
+    MaxCombo = math.huge,
+    HitboxLimbs = {"RightLowerArm", "RightUpperArm", "LeftLowerArm", "LeftUpperArm", "RightHand", "LeftHand"},
+    AutoClickEnabled = true,
+    MaxTargets = 20,
+    
+    -- 🔥 TỐC ĐỘ SPAM MỚI (quan trọng nhất)
+    SpamPerFrame = 33,        -- 22 = an toàn | 26-28 = mạnh nhất | 30-33 = max (dễ ignore hơn)
+    UseRenderStepped = false, -- Bật = true nếu executor yếu
 }
 
 --// FastAttack Class
@@ -35,6 +38,7 @@ function FastAttack.new()
         ComboDebounce = 0,
         ShootDebounce = 0,
         M1Combo = 0,
+        EnemyRootPart = nil,
         Connections = {},
         Overheat = {Dragonstorm = {MaxOverheat = 3, Cooldown = 0, TotalOverheat = 0, Distance = 350, Shooting = false}},
         ShootsPerTarget = {["Dual Flintlock"] = 2},
@@ -79,6 +83,7 @@ function FastAttack:GetBladeHits(Character, Distance)
                 local BasePart = Enemy:FindFirstChild("HumanoidRootPart")
                 if BasePart and (Position - BasePart.Position).Magnitude <= Distance then
                     table.insert(BladeHits, {Enemy, BasePart})
+                    if not self.EnemyRootPart then self.EnemyRootPart = BasePart end
                 end
             end
         end
@@ -89,23 +94,21 @@ function FastAttack:GetBladeHits(Character, Distance)
 end
 
 function FastAttack:GetCombo()
-    local Combo = (tick() - self.ComboDebounce) <= 0.025 and self.M1Combo or 0
+    local Combo = (tick() - self.ComboDebounce) <= Config.ComboResetTime and self.M1Combo or 0
     Combo = Combo + 1
     self.ComboDebounce = tick()
     self.M1Combo = Combo
     return Combo
 end
 
--- Bắn súng tối ưu
 function FastAttack:ShootInTarget(TargetPosition)
     local Character = Player.Character
     if not self:IsEntityAlive(Character) then return end
     local Equipped = Character:FindFirstChildOfClass("Tool")
     if not Equipped or Equipped.ToolTip ~= "Gun" then return end
-    if (tick() - self.ShootDebounce) < Config.GunFireRate then return end
-
+    local Cooldown = 0.0001
+    if (tick() - self.ShootDebounce) < Cooldown then return end
     local ShootType = self.SpecialShoots[Equipped.Name] or "Normal"
-    
     if ShootType == "Position" or (ShootType == "TAP" and Equipped:FindFirstChild("RemoteEvent")) then
         Equipped:SetAttribute("LocalTotalShots", (Equipped:GetAttribute("LocalTotalShots") or 0) + 1)
         GunValidator:FireServer(self:GetValidator2())
@@ -114,19 +117,16 @@ function FastAttack:ShootInTarget(TargetPosition)
         else
             ShootGunEvent:FireServer(TargetPosition)
         end
+        self.ShootDebounce = tick()
     else
-        if Equipped:FindFirstChild("RemoteEvent") then
-            Equipped.RemoteEvent:FireServer("TAP", TargetPosition)
-        else
-            ShootGunEvent:FireServer(TargetPosition)
-        end
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+        task.wait(0.0001)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+        self.ShootDebounce = tick()
     end
-    
-    self.ShootDebounce = tick()
 end
 
 function FastAttack:GetValidator2()
-    -- Giữ nguyên code validator (có thể cần cập nhật theo game)
     local v1 = getupvalue(self.ShootFunction, 15)
     local v2 = getupvalue(self.ShootFunction, 13)
     local v3 = getupvalue(self.ShootFunction, 16)
@@ -150,11 +150,10 @@ function FastAttack:GetValidator2()
     return math.floor(v9 / v4 * 16777215), v7
 end
 
--- Đánh thường với nhiều mục tiêu
-function FastAttack:UseNormalClick(Character)
+function FastAttack:UseNormalClick(Character, Cooldown)
     local BladeHits = self:GetBladeHits(Character)
     if #BladeHits == 0 then return end
-    RegisterAttack:FireServer(0.00001)
+    RegisterAttack:FireServer(Cooldown or 0.00001)
     local PrimaryTarget = BladeHits[1][2]
     if self.CombatFlags and self.HitFunction then
         pcall(function() self.HitFunction(PrimaryTarget, BladeHits) end)
@@ -163,7 +162,6 @@ function FastAttack:UseNormalClick(Character)
     end
 end
 
--- Trái ác quỷ M1
 function FastAttack:UseFruitM1(Character, Equipped, Combo)
     local Targets = self:GetBladeHits(Character)
     if not Targets[1] then return end
@@ -171,9 +169,8 @@ function FastAttack:UseFruitM1(Character, Equipped, Combo)
     Equipped.LeftClickRemote:FireServer(Direction, Combo)
 end
 
--- Hàm tấn công chính (được gọi nhiều lần mỗi frame nếu burst > 1)
 function FastAttack:Attack()
-    if not Config.Enabled then return end
+    if not Config.AutoClickEnabled then return end
     local Character = Player.Character
     if not Character or not self:IsEntityAlive(Character) then return end
     local Humanoid = Character:FindFirstChild("Humanoid")
@@ -182,84 +179,43 @@ function FastAttack:Attack()
     local ToolTip = Equipped.ToolTip
     if not table.find({"Melee", "Blox Fruit", "Sword", "Gun"}, ToolTip) then return end
     if not self:CheckStun(Character, Humanoid, ToolTip) then return end
-
+    local Combo = self:GetCombo()
     if ToolTip == "Blox Fruit" and Equipped:FindFirstChild("LeftClickRemote") then
-        self:UseFruitM1(Character, Equipped, self:GetCombo())
+        self:UseFruitM1(Character, Equipped, Combo)
     elseif ToolTip == "Gun" then
-        local Targets = self:GetBladeHits(Character, Config.GunRange)
+        local Targets = self:GetBladeHits(Character, 120)
         for _, t in ipairs(Targets) do
             self:ShootInTarget(t[2].Position)
         end
     else
-        self:UseNormalClick(Character)
+        self:UseNormalClick(Character, 0.00001)
     end
 end
 
--- Khởi tạo instance
+--// Instance + OPTIMIZED SPAM (BYPASS IGNORE - KHÔNG LAG)
 local AttackInstance = FastAttack.new()
 
--- Kết nối Heartbeat với Burst Mode
-AttackInstance.Connections = {
-    RunService.Heartbeat:Connect(function()
-        if not Config.Enabled then return end
-        for _ = 1, Config.BurstCount do
-            AttackInstance:Attack()
-            -- Nếu muốn cực nhanh, có thể bỏ qua task.wait, nhưng cẩn thận lag
-            -- task.wait() -- bỏ comment nếu muốn giãn cách nhẹ
-        end
-    end)
-}
-
---// GUI đơn giản (ScreenGui)
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = Player:WaitForChild("PlayerGui")
-ScreenGui.ResetOnSpawn = false
-
-local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 200, 0, 100)
-Frame.Position = UDim2.new(0, 10, 0, 10)
-Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Frame.BackgroundTransparency = 0.2
-Frame.Active = true
-Frame.Draggable = true
-Frame.Parent = ScreenGui
-
-local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Size = UDim2.new(0, 180, 0, 30)
-ToggleBtn.Position = UDim2.new(0, 10, 0, 10)
-ToggleBtn.Text = "Auto Attack: ON"
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-ToggleBtn.Parent = Frame
-ToggleBtn.MouseButton1Click:Connect(function()
-    Config.Enabled = not Config.Enabled
-    ToggleBtn.Text = Config.Enabled and "Auto Attack: ON" or "Auto Attack: OFF"
-    ToggleBtn.BackgroundColor3 = Config.Enabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-end)
-
-local SliderLabel = Instance.new("TextLabel")
-SliderLabel.Size = UDim2.new(0, 180, 0, 20)
-SliderLabel.Position = UDim2.new(0, 10, 0, 45)
-SliderLabel.Text = "Burst: 10"
-SliderLabel.BackgroundTransparency = 1
-SliderLabel.TextColor3 = Color3.new(1,1,1)
-SliderLabel.Parent = Frame
-
-local Slider = Instance.new("TextBox")
-Slider.Size = UDim2.new(0, 180, 0, 25)
-Slider.Position = UDim2.new(0, 10, 0, 65)
-Slider.Text = "10"
-Slider.PlaceholderText = "Số lần/frame"
-Slider.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-Slider.TextColor3 = Color3.new(1,1,1)
-Slider.Parent = Frame
-Slider.FocusLost:Connect(function()
-    local val = tonumber(Slider.Text)
-    if val and val > 0 then
-        Config.BurstCount = math.floor(val)
-        SliderLabel.Text = "Burst: " .. Config.BurstCount
-    else
-        Slider.Text = tostring(Config.BurstCount)
+local function OptimizedSpam()
+    for i = 1, Config.SpamPerFrame do
+        pcall(AttackInstance.Attack, AttackInstance)
     end
-end)
+end
 
-print("🔥 FastAttack siêu tốc đã sẵn sàng! Burst mặc định: 10 lần/frame. Điều chỉnh qua GUI.")
+-- 🔥 Chỉ dùng 1 connection duy nhất (siêu nhẹ)
+table.insert(AttackInstance.Connections, RunService.Heartbeat:Connect(OptimizedSpam))
+
+if Config.UseRenderStepped then
+    table.insert(AttackInstance.Connections, RunService.RenderStepped:Connect(OptimizedSpam))
+end
+
+print("🚀 FastAttack Optimized Loaded | SpamPerFrame:", Config.SpamPerFrame, "| Connections: 1")
+
+--// Cleanup (tùy chọn)
+function AttackInstance:Destroy()
+    for _, conn in ipairs(AttackInstance.Connections) do
+        if conn then conn:Disconnect() end
+    end
+end
+
+--// RETURN NHƯ BẠN YÊU CẦU
+return FastAttack
