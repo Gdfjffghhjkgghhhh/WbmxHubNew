@@ -15,7 +15,7 @@ local Config = {
     MobRange    = 60,
     PlayerRange = 60,
     MaxTargets  = 8,
-    Cooldown    = 0.08, -- giây giữa mỗi lần fire (tăng nếu vẫn lag)
+    Cooldown    = 0, -- giây giữa mỗi lần fire (tăng nếu vẫn lag)
 }
 
 -- ══════════════════════════════════════
